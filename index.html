@@ -732,7 +732,7 @@
             localStorage.setItem('theme', newTheme);
         });
 
-        window.addEventListener('load', async () => {
+        window.addEventListener('load', () => {
             const params = new URLSearchParams(window.location.search);
 
             if (params.get('admin') === 'true') {
@@ -740,35 +740,53 @@
             }
             if (localStorage.getItem('ignore_visits') === 'true') return;
 
-            try {
-                if (sessionStorage.getItem('pinged')) return;
-                sessionStorage.setItem('pinged', '1');
-            } catch (err) { }
+            // Chrome prerenders pages it expects you to open, straight from the address
+            // bar, and runs this script with nobody looking at the page. Wait for the
+            // prerender to be activated, and for the tab to be visible, before counting
+            // it as a visit.
+            const whenVisible = (run) => {
+                if (document.prerendering) {
+                    document.addEventListener('prerenderingchange', () => whenVisible(run), { once: true });
+                } else if (document.visibilityState !== 'visible') {
+                    document.addEventListener('visibilitychange', () => whenVisible(run), { once: true });
+                } else {
+                    run();
+                }
+            };
 
-            try {
-                const tagged = params.get('utm_source') || params.get('ref');
-                const source = tagged
-                    ? tagged
-                    : document.referrer
-                        ? new URL(document.referrer).hostname
-                        : 'Direct / typed URL';
+            whenVisible(async () => {
+                try {
+                    if (sessionStorage.getItem('pinged')) return;
+                    sessionStorage.setItem('pinged', '1');
+                } catch (err) { }
 
-                const ua = navigator.userAgent;
-                let os = 'Unknown OS';
-                if (/Windows/i.test(ua)) os = 'Windows';
-                else if (/Android/i.test(ua)) os = 'Android';
-                else if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS';
-                else if (/Mac/i.test(ua)) os = 'macOS';
-                else if (/Linux/i.test(ua)) os = 'Linux';
+                try {
+                    const tagged = params.get('utm_source') || params.get('ref');
+                    const source = tagged
+                        ? tagged
+                        : document.referrer
+                            ? new URL(document.referrer).hostname
+                            : 'Direct / typed URL';
 
-                await fetch('https://visitor-worker.ibraheemelsheikha.workers.dev/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ source, os }),
-                    keepalive: true
-                });
-            } catch (err) { }
+                    const ua = navigator.userAgent;
+                    let os = 'Unknown OS';
+                    if (/Windows/i.test(ua)) os = 'Windows';
+                    else if (/Android/i.test(ua)) os = 'Android';
+                    else if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS';
+                    else if (/Mac/i.test(ua)) os = 'macOS';
+                    else if (/Linux/i.test(ua)) os = 'Linux';
+
+                    await fetch('https://visitor-worker.ibraheemelsheikha.workers.dev/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ source, os }),
+                        keepalive: true
+                    });
+                } catch (err) { }
+            });
         });
+
+
     </script>
 
 </body>
